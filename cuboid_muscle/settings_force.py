@@ -17,14 +17,14 @@ import variables
 n_ranks = (int)(sys.argv[-1])
 
 # parameters
-force = 1.0                       # [N] load on top
+force = 0.0                       # [N] load on top
 material_parameters = [3.176e-10, 1.813, 1.075e-2, 1.0]     # [c1, c2, b, d]
 physical_extent = [3.0, 3.0, 12.0]
-constant_body_force = None                                                                      #?
+constant_body_force = None                                                                      
 scenario_name = "tensile_test"
-dirichlet_bc_mode = "fix_floating"                                                              #?
+dirichlet_bc_mode = "fix_floating"                                                              
  
-if len(sys.argv) > 3:                                                                           #?
+if len(sys.argv) > 3:                                                                           
   scenario_name = sys.argv[0]
   force = float(sys.argv[1])
   print("scenario_name: {}".format(scenario_name))
@@ -55,18 +55,6 @@ if len(sys.argv) > 3:                                                           
   else:
     print("Error! Please specify the correct scenario, see settings.py for allowed values.\n")
     quit()
-
-"""
-# number of elements (2x2x2)
-nx = 8
-ny = 8
-nz = 8
-
-# number of nodes
-mx = 2*nx + 1
-my = 2*ny + 1
-mz = 2*nz + 1
-"""
 
 nx, ny, nz = 3, 3, 12                     # number of elements
 mx, my, mz = 2*nx+1, 2*ny+1, 2*nz+1 # quadratic basis functions
@@ -115,9 +103,6 @@ for fiber_x in range(fb_x):
             "nRanks":               n_ranks
         }
 
-# boundary conditions (for quadratic elements)
-# --------------------------------------------
-
 # set Dirichlet BC, fix bottom
 elasticity_dirichlet_bc = {}
 k = 0
@@ -145,7 +130,6 @@ elasticity_neumann_bc = [{"element": k*nx*ny + j*nx + i, "constantVector": tract
 def handle_result_hyperelasticity(result):
   data = result[0]
 
-#-----------------------------------------------------------------------
   number_of_nodes = mx * my
   average_z_start = 0
   average_z_end = 0
@@ -163,26 +147,18 @@ def handle_result_hyperelasticity(result):
   print("length of muscle: ", length_of_muscle)
 
   if data["timeStepNo"] == 0:
-    f = open("muscle_length.csv", "a")
+    f = open("muscle_length_prestretch.csv", "w")
     f.write(str(length_of_muscle))
     f.write(",")
     f.close()
   else:
-    f = open("muscle_length.csv", "a")
+    f = open("muscle_length_prestretch.csv", "a")
     f.write(str(length_of_muscle))
     f.write(",")
     f.close()
-#-----------------------------------------------------------------------
   
   if data["timeStepNo"] == 1:
     field_variables = data["data"]
-    
-    # field_variables[0]: geometry
-    # field_variables[1]: u
-    # field_variables[2]: v
-    # field_variables[3]: t (current traction)
-    # field_variables[4]: T (material traction)
-    # field_variables[5]: PK2-Stress (Voigt), components: S_11, S_22, S_33, S_12, S_13, S_23
     
     strain = max(field_variables[1]["components"][2]["values"])
     stress = max(field_variables[5]["components"][2]["values"])
@@ -214,15 +190,6 @@ def handle_result_linear_elasticity(result):
   if data["timeStepNo"] == -1:
     field_variables = data["data"]
     
-    # field_variables[0]: geometry
-    # field_variables[1]: solution (displacements)
-    # field_variables[2]: rightHandSide
-    # field_variables[3]: -rhsNeumannBC
-    
-    # σ = CC : ε with CC_abcd = K δ_ab δ_cd + μ(δ_ac δ_bd + δ_ad δ_bc - 2/3 δ_ab δ_cd)
-    # σ_ab = K*δ_ab*ε_cc + 2*μ*(ε_ab - 1/3*δ_ab*ε_cc)
-    # σ_33 = K tr(ε) + μ (ε_33 + ε_33 - 2/3 tr(ε)) =(tensile test in z direction)= (K + 4/3 μ) ε_33
-    
     strain = max(field_variables[1]["components"][2]["values"])
     K = 50    # parameters as given in config
     mu = 100
@@ -233,12 +200,9 @@ def handle_result_linear_elasticity(result):
     with open("result.csv","a") as f:
       f.write("{},{},{}\n".format(scenario_name,strain,stress))
 
-def callback_function(raw_data):
+def callback_function_contraction(raw_data):
   t = raw_data[0]["currentTime"]
-  print("test")
-  if False:
-  #if t == variables.dt_3D or t == variables.end_time:
-    print("test2")
+  if True:
     number_of_nodes = variables.bs_x * variables.bs_y
     average_z_start = 0
     average_z_end = 0
@@ -256,12 +220,12 @@ def callback_function(raw_data):
     print("length of muscle: ", length_of_muscle)
 
     if t == variables.dt_3D:
-      f = open("muscle_length.csv", "w")
+      f = open("muscle_length_contraction.csv", "w")
       f.write(str(length_of_muscle))
       f.write(",")
       f.close()
     else:
-      f = open("muscle_length.csv", "a")
+      f = open("muscle_length_contraction.csv", "a")
       f.write(str(length_of_muscle))
       f.write(",")
       f.close()
@@ -272,27 +236,11 @@ config = {
   "logFormat":                    "csv",                        # "csv" or "json", format of the lines in the log file, csv gives smaller files
   "solverStructureDiagramFile":   "solver_structure.txt",       # output file of a diagram that shows data connection between solvers
   "mappingsBetweenMeshesLogFile": "mappings_between_meshes_log.txt",    # log file for mappings 
-  "Meshes": {
-    "3Dmesh_quadratic": { 
-      "inputMeshIsGlobal":          True,                       # boundary conditions are specified in global numberings, whereas the mesh is given in local numberings
-      "nElements":                  [nx, ny, nz],               # number of quadratic elements in x, y and z direction
-      "physicalExtent":             physical_extent,            # physical size of the box
-      "physicalOffset":             [0, 0, 0],                  # offset/translation where the whole mesh begins
-    },
-    "3Dmesh_febio": { 
-      "inputMeshIsGlobal":          True,                       # boundary conditions are specified in global numberings, whereas the mesh is given in local numberings
-      "nElements":                  [2*nx, 2*ny, 2*nz],               # number of quadratic elements in x, y and z direction
-      "physicalExtent":             physical_extent,            # physical size of the box
-      "physicalOffset":             [0, 0, 0],                  # offset/translation where the whole mesh begins
-    }
-  },
 
   "Meshes": meshes,
   "MappingsBetweenMeshes": { 
     "mesh3D" : ["fiber{}".format(variables.get_fiber_no(fiber_x, fiber_y)) for fiber_x in range(variables.fb_x) for fiber_y in range(variables.fb_y)]
   },
-
-
 
   "Solvers": {
     "linearElasticitySolver": {           # solver for linear elasticity
@@ -333,6 +281,10 @@ config = {
   "Coupling": {
 
     #I dont know what to put here
+
+    "timeStepWidth": variables.end_time,
+    "endTime": variables.end_time,
+    "connectedSlotsTerm1To2": {},
 
     "Term1": {
       "HyperelasticitySolver": {
@@ -397,7 +349,7 @@ config = {
         "OutputWriter" : [
           
           # Paraview files
-          {"format": "Paraview", "outputInterval": 1, "filename": "out/"+scenario_name+"/u", "binary": True, "fixedFormat": False, "onlyNodalValues":True, "combineFiles":True, "fileNumbering": "incremental"},
+          {"format": "Paraview", "outputInterval": 1, "filename": "out/"+scenario_name+"/prestretch", "binary": True, "fixedFormat": False, "onlyNodalValues":True, "combineFiles":True, "fileNumbering": "incremental"},
           
           # Python files and callback
           {"format": "PythonFile", "outputInterval": 1, "filename": "out/all/"+scenario_name, "binary": True, "fixedFormat": False, "onlyNodalValues":True, "combineFiles":True, "fileNumbering": "incremental"},
@@ -511,7 +463,7 @@ config = {
                       {
                         "format":             "Paraview",
                         "outputInterval":     int(1.0 / variables.dt_3D * variables.output_interval),
-                        "filename":           "out/" + scenario_name + "/muscle",
+                        "filename":           "out/" + scenario_name + "/fibers",
                         "fileNumbering":      "incremental",
                         "binary":             True,
                         "fixedFormat":        False,
@@ -582,7 +534,7 @@ config = {
               {
                 "format":             "Paraview",
                 "outputInterval":     int(1.0 / variables.dt_3D * variables.output_interval),
-                "filename":           "out/" + scenario_name + "/muscle",
+                "filename":           "out/" + scenario_name + "/mechanics",
                 "fileNumbering":      "incremental",
                 "binary":             True,
                 "fixedFormat":        False,
@@ -599,7 +551,7 @@ config = {
               "density":                variables.rho,
               "timeStepOutputInterval": 1,
 
-              "meshName":                   "mesh3D",
+              "meshName":                   "3Dmesh_quadratic",
               "fiberDirectionInElement":    variables.fiber_direction,
               "inputMeshIsGlobal":          True,
               "fiberMeshNames":             [],
@@ -616,13 +568,13 @@ config = {
               "extrapolateInitialGuess":    True,
               "nNonlinearSolveCalls":       1,
 
-              "dirichletBoundaryConditions":                            variables.dirichlet_bc,
-              "neumannBoundaryConditions":                              variables.neumann_bc,
+              "dirichletBoundaryConditions":                            {}, #elasticity_dirichlet_bc, #variables.dirichlet_bc,
+              "neumannBoundaryConditions":                              {}, #elasticity_neumann_bc, #variables.neumann_bc,
               "updateDirichletBoundaryConditionsFunction":              None,
               "updateDirichletBoundaryConditionsFunctionCallInterval":  1,
               "divideNeumannBoundaryConditionValuesByTotalArea":        True,
 
-              "initialValuesDisplacements": [[0, 0, 0] for _ in range(variables.bs_x * variables.bs_y * variables.bs_z)],
+              #"initialValuesDisplacements": [[0, 0, 0] for _ in range(variables.bs_x * variables.bs_y * variables.bs_z)],
               "initialValuesVelocities":    [[0, 0, 0] for _ in range(variables.bs_x * variables.bs_y * variables.bs_z)],
               "constantBodyForce":          (0, 0, 0),
 
@@ -633,7 +585,7 @@ config = {
               "OutputWriter": [
                 {
                   "format": "PythonCallback",
-                  "callback": callback_function,
+                  "callback": callback_function_contraction,
                   "outputInterval": 1,
                 }
               ],
@@ -645,55 +597,5 @@ config = {
         }
       }
     }
-  },
-
-
-
-  "FiniteElementMethod" : {       # linear elasticity finite element method
-    "meshName":             "3Dmesh_quadratic",           # mesh with quadratic Lagrange ansatz functions
-    "inputMeshIsGlobal":    True,                         # boundary conditions are specified in global numberings, whereas the mesh is given in local numbering 
-    "solverName":           "linearElasticitySolver",                   # reference to the linear solver
-    "prefactor":            1.0,                                        # prefactor of the lhs, has no effect here
-    "slotName":             "",
-    "dirichletBoundaryConditions": elasticity_dirichlet_bc,             # the Dirichlet boundary conditions that define values for displacements u
-    "dirichletOutputFilename":     None,                                # filename for a vtp file that contains the Dirichlet boundary condition nodes and their values, set to None to disable
-    "neumannBoundaryConditions":   elasticity_neumann_bc,               # Neumann boundary conditions that define traction forces on surfaces of elements
-    "divideNeumannBoundaryConditionValuesByTotalArea": False,           # if the given Neumann boundary condition values under "neumannBoundaryConditions" are total forces instead of surface loads and therefore should be scaled by the surface area of all elements where Neumann BC are applied
-    
-    # material parameters
-    "bulkModulus":          50,     # bulk modulus K, how much incompressible, high -> incompressible, low -> very compressible
-    "shearModulus":         100,      # shear modulus, μ or G, "rigidity", how much shear stress response to shear deformation
-    
-    "OutputWriter" : [
-      # Paraview files
-      {"format": "Paraview", "outputInterval": 1, "filename": "out/"+scenario_name+"/u", "binary": True, "fixedFormat": False, "onlyNodalValues":True, "combineFiles":True, "fileNumbering": "incremental"},
-      
-      # Python files and callback
-      {"format": "PythonFile", "outputInterval": 1, "filename": "out/all/"+scenario_name, "binary": True, "fixedFormat": False, "onlyNodalValues":True, "combineFiles":True, "fileNumbering": "incremental"},
-      {"format": "PythonCallback", "outputInterval": 1, "filename": "out/all/"+scenario_name, "callback": handle_result_linear_elasticity, "binary": True, "fixedFormat": False, "onlyNodalValues":True, "combineFiles":True, "fileNumbering": "incremental"},
-    ],
-  },
-  "NonlinearElasticitySolverFebio": {
-    "durationLogKey": "febio",
-    "tractionVector": traction_vector,                    # traction vector that is applied
-    #"tractionElementNos": [(2*nz-1)*2*nx*2*ny + j*2*nx + i for j in range(2*ny) for i in range(2*nx)],    # elements on which traction is applied
-    "tractionElementNos": [(nz-1)*nx*ny + j*nx + i for j in range(ny) for i in range(nx)],    # elements on which traction is applied
-    "dirichletBoundaryConditionsMode": dirichlet_bc_mode, # "fix_all" or "fix_floating", how the bottom of the box will be fixed, fix_all fixes all nodes, fix_floating fixes all nodes only in z and the edges in x/y direction
-    "materialParameters": material_parameters,            # c0, c1, k for Ψ = c0 * (I1-3) + c1 * (I2-3) + 1/2*k*(log(J))^2
-    
-    "meshName":             "3Dmesh_quadratic",           # mesh with quadratic Lagrange ansatz functions
-    "inputMeshIsGlobal":    True,                         # boundary conditions are specified in global numberings, whereas the mesh is given in local numbering 
-    "slotNames":            [],
-    
-    # 1. main output writer that writes output files using the quadratic elements function space. Writes displacements, velocities and PK2 stresses.
-    "OutputWriter" : [
-      
-      # Paraview files
-      {"format": "Paraview", "outputInterval": 1, "filename": "out/"+scenario_name+"/u", "binary": True, "fixedFormat": False, "onlyNodalValues":True, "combineFiles":True, "fileNumbering": "incremental"},
-      
-      # Python files and callback
-      {"format": "PythonFile", "outputInterval": 1, "filename": "out/all/"+scenario_name, "binary": True, "fixedFormat": False, "onlyNodalValues":True, "combineFiles":True, "fileNumbering": "incremental"},
-      {"format": "PythonCallback", "outputInterval": 1, "filename": "out/all/"+scenario_name, "callback": handle_result_febio, "binary": True, "fixedFormat": False, "onlyNodalValues":True, "combineFiles":True, "fileNumbering": "incremental"},
-    ],
   },
 }

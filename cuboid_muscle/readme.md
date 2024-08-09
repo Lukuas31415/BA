@@ -2,7 +2,7 @@
 
 ## Setup
 - A dummy cuboid muscle geometry. 
-- Solver comprises both mechanics solver + fastmonodomain solver. 
+- Solver comprises hyperelasticity solver for the prestretch and both mechanics solver + fastmonodomain solver for the contraction. 
 - It uses the CellML model "hodgkin_huxley-razumova".
 - No preCICE involved. 
 
@@ -14,11 +14,10 @@ mkorn && sr
 For a debug build, look into the documentation. 
 
 ### How to run?
-To run the case go into the build directory and choose one of the two options:
+To run the case go into the build directory and run:
 
-- To run the shorten model:
 ```
-./muscle_contraction ../settings_muscle_contraction.py variables.py
+./incompressible_mooney_rivlin ../settings_force.py incompressible_mooney_rivlin 10.0
 ```
 
 > [!WARNING]  
